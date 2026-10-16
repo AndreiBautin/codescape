@@ -1,0 +1,3 @@
+#!/bin/sh
+# Gate every push on the full verify. Escape hatch: git push --no-verify
+pnpm verify
