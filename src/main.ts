@@ -14,3 +14,12 @@ startApp({
   log,
   now: () => performance.now(),
 });
+
+// The installed app updates itself on the next launch: a screensaver has no in-progress work to
+// lose, so there is nothing to prompt about.
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).then(
+    () => log.info('sw.registered'),
+    () => log.warn('sw.failed'),
+  );
+}
