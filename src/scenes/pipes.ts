@@ -6,6 +6,8 @@ import type { Hover, Scene, SceneContext } from './scene';
 
 const RADIUS = 0.34;
 const SEGMENTS_PER_SECOND = 14;
+/** Big repos grow faster, so the whole tree is up within this long. */
+const MAX_GROW_SECONDS = 40;
 /** After the whole tree has grown, hold it on screen this long before regrowing. */
 const HOLD_SECONDS = 14;
 
@@ -91,7 +93,7 @@ export function createPipesScene(ctx: SceneContext): Scene {
     });
     progress = 0;
     hold = 0;
-    const dist = layout.bound * 2.1;
+    const dist = layout.bound * 1.6;
     camera.position.set(dist, dist * 0.6, dist);
     controls.target.set(0, 0, 0);
   };
@@ -122,7 +124,8 @@ export function createPipesScene(ctx: SceneContext): Scene {
     },
     frame(dt) {
       const longest = Math.max(...layout.pipes.map((p) => p.length));
-      if (progress < longest) progress += dt * SEGMENTS_PER_SECOND;
+      if (progress < longest)
+        progress += dt * Math.max(SEGMENTS_PER_SECOND, longest / MAX_GROW_SECONDS);
       else if ((hold += dt) > HOLD_SECONDS) build();
       apply();
       controls.update();

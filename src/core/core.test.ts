@@ -211,3 +211,25 @@ describe('estimateLines', () => {
     expect(estimateLines(320, 0, 0)).toBe(10);
   });
 });
+
+describe('layoutPipes grouping', () => {
+  const mono = buildTree(
+    'mono',
+    ['a', 'b', 'c', 'd', 'e', 'f'].flatMap((p) =>
+      Array.from({ length: 40 }, (_, i) => ({
+        path: `packages/${p}/src/f${i}.ts`,
+        bytes: 100,
+        lines: 10,
+      })),
+    ),
+  );
+
+  it('splits a single dominant folder so a monorepo is not one colour', () => {
+    expect(layoutPipes(mono, createRng(1)).pipes.length).toBeGreaterThanOrEqual(5);
+  });
+
+  it('shares the segment budget so no pipe is starved', () => {
+    const layout = layoutPipes(mono, createRng(1), { maxSegments: 60, maxFilesPerDir: 99 });
+    for (const p of layout.pipes) expect(p.length).toBeGreaterThan(0);
+  });
+});

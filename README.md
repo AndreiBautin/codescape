@@ -1,5 +1,7 @@
 # Codescape
 
+**Live:** https://andreibautin.github.io/codescape/ · **Landing page:** https://andreibautin.github.io/codescape-demo/ ([repo](https://github.com/AndreiBautin/codescape-demo))
+
 A screensaver for your source code. Point it at a folder and watch the codebase grow as
 **3D Pipes**, fly past as a **Starfield**, or ribbon across the screen as **Mystify** — the
 old Windows screensavers, rebuilt with glass UI and real data.
@@ -13,12 +15,19 @@ pnpm install
 pnpm dev
 ```
 
-Then open http://localhost:5391 and choose a folder (Chrome or Edge for the folder picker and
+Then open http://localhost:5391 and paste any public GitHub repo (`owner/name` or URL), or choose a local folder (Chrome or Edge for the folder picker and
 drag-and-drop; other browsers fall back to an upload-style picker). `?demo=1` skips straight
 to a built-in sample codebase.
 
 **Keys:** `1` `2` `3` modes · `Space` pause · `F` fullscreen · `O` open folder · `R` reshuffle.
-URL options: `mode`, `speed` (0.1–5), `seed`, `demo`.
+URL options: `repo` (e.g. `?repo=facebook/react`), `mode`, `speed` (0.1–5), `seed`, `demo`.
+
+**Install:** in Chrome/Edge click the install icon in the address bar — it gets a desktop icon,
+its own window, and opens offline (repos still need the network).
+
+**Deploy:** every push to `main` runs `pnpm verify`, then publishes `dist/` to GitHub Pages.
+Free, no server. GitHub's anonymous API limit is 60 requests/hour per visitor; each repo
+load uses two.
 
 ## The idea that makes it click
 

@@ -65,6 +65,9 @@ export interface PipesOptions {
   readonly maxFilesPerDir: number;
 }
 
+/** Split the largest folder into its subfolders until there are at least this many pipes. */
+const MIN_PIPES = 5;
+
 export const DEFAULT_PIPES_OPTIONS: PipesOptions = { maxSegments: 1600, maxFilesPerDir: 18 };
 
 export function layoutPipes(
@@ -72,14 +75,25 @@ export function layoutPipes(
   rng: Rng,
   options: PipesOptions = DEFAULT_PIPES_OPTIONS,
 ): PipesLayout {
-  // Each top-level directory is its own pipe; loose top-level files share a pipe named after the root.
-  const groups: { name: string; nodes: TreeNode[] }[] = [];
+  // Each top-level directory is its own pipe; loose files share a pipe named after the root.
+  // Repos that keep everything under one folder (packages/, src/) would otherwise be a single
+  // colour, so the largest folder is split into its subfolders until there are enough pipes.
   const loose: TreeNode[] = [];
-  for (const child of root.children) {
-    if (child.kind === 'dir' && groups.length < PIPE_COLORS.length - 1)
-      groups.push({ name: child.name, nodes: [child] });
-    else loose.push(child);
+  let dirs: DirNode[] = [];
+  for (const child of root.children) (child.kind === 'dir' ? dirs : loose).push(child);
+  for (;;) {
+    const largest = dirs.reduce<DirNode | null>((a, d) => (!a || d.files > a.files ? d : a), null);
+    const subdirs = largest?.children.filter((c): c is DirNode => c.kind === 'dir') ?? [];
+    if (!largest || dirs.length >= MIN_PIPES || subdirs.length < 2) break;
+    dirs = [...dirs.filter((d) => d !== largest), ...subdirs];
+    loose.push(...largest.children.filter((c) => c.kind === 'file'));
   }
+  dirs.sort((a, b) => b.lines - a.lines);
+  loose.push(...dirs.splice(PIPE_COLORS.length - 1));
+  const groups: { name: string; nodes: TreeNode[] }[] = dirs.map((d) => ({
+    name: d.path,
+    nodes: [d],
+  }));
   if (loose.length > 0) groups.push({ name: root.name, nodes: loose });
 
   const budget = Math.min(options.maxSegments, root.files + countDirs(root));
@@ -112,6 +126,8 @@ export function layoutPipes(
 
   groups.forEach((group, pipe) => {
     let order = 0;
+    // Each pipe gets a fair share of what is left, so the first big folder cannot starve the rest.
+    const limit = segments.length + Math.ceil((budget - segments.length) / (groups.length - pipe));
     const start: Vec3 = {
       x: rng.int(-bound + 2, bound - 2),
       y: rng.int(-bound + 2, bound - 2),
@@ -120,7 +136,7 @@ export function layoutPipes(
     occupied.add(key(start));
 
     const grow = (node: TreeNode, at: Vec3, last: Vec3 | null): void => {
-      if (segments.length >= budget) return;
+      if (segments.length >= limit) return;
       const { dir, len } = step(at, last);
       const to = add(at, dir, len);
       for (let i = 1; i <= len; i++) occupied.add(key(add(at, dir, i)));
