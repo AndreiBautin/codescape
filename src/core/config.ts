@@ -1,3 +1,5 @@
+import { parseRepo, type RepoRef } from './github';
+
 /** Configuration comes from the URL query string. Parsing is total: a bad value falls back to its
  *  documented default with a warning, never an exception. */
 export const MODES = ['pipes', 'starfield', 'mystify'] as const;
@@ -11,9 +13,17 @@ export interface Config {
   readonly seed: number | null;
   /** Start straight into the bundled demo codebase instead of the welcome screen. Default false. */
   readonly demo: boolean;
+  /** Public GitHub repository to load on start (`?repo=owner/name`). Default none. */
+  readonly repo: RepoRef | null;
 }
 
-export const DEFAULT_CONFIG: Config = { mode: 'pipes', speed: 1, seed: null, demo: false };
+export const DEFAULT_CONFIG: Config = {
+  mode: 'pipes',
+  speed: 1,
+  seed: null,
+  demo: false,
+  repo: null,
+};
 
 export function isMode(value: unknown): value is Mode {
   return typeof value === 'string' && (MODES as readonly string[]).includes(value);
@@ -22,7 +32,7 @@ export function isMode(value: unknown): value is Mode {
 export function parseConfig(query: string): { config: Config; warnings: string[] } {
   const params = new URLSearchParams(query);
   const warnings: string[] = [];
-  let { mode, speed, seed, demo } = DEFAULT_CONFIG;
+  let { mode, speed, seed, demo, repo } = DEFAULT_CONFIG;
 
   const rawMode = params.get('mode');
   if (rawMode !== null) {
@@ -47,5 +57,10 @@ export function parseConfig(query: string): { config: Config; warnings: string[]
     else if (rawDemo === '0' || rawDemo === 'false') demo = false;
     else warnings.push('demo: expected 1 or 0, using 0');
   }
-  return { config: { mode, speed, seed, demo }, warnings };
+  const rawRepo = params.get('repo');
+  if (rawRepo !== null) {
+    repo = parseRepo(rawRepo);
+    if (!repo) warnings.push('repo: expected owner/name or a github.com URL, ignoring');
+  }
+  return { config: { mode, speed, seed, demo, repo }, warnings };
 }

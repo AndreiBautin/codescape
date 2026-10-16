@@ -1,8 +1,10 @@
 import { MODES, isMode, type Config, type Mode } from '../core/config';
 import { demoCodebase } from '../core/demo';
+import { formatRepo, parseRepo, type RepoRef } from '../core/github';
 import type { Logger } from '../core/log';
 import { createRng } from '../core/rng';
 import { buildTree, summarize, type DirNode } from '../core/tree';
+import { GithubError, scanGithubRepo } from '../scan/scanGithub';
 import { scanDirectoryHandle, scanFileList, type ScanResult } from '../scan/scanFolder';
 import { createMystifyScene } from '../scenes/mystify';
 import { createPipesScene } from '../scenes/pipes';
@@ -125,6 +127,7 @@ export function startApp(deps: AppDeps): void {
       const handle = await window.showDirectoryPicker({ mode: 'read' });
       welcome.classList.remove('gone');
       status.textContent = 'Reading…';
+      setRepoParam(null);
       loadScan(await scanDirectoryHandle(handle, progress));
     } catch (err) {
       scanFailed(err);
@@ -138,7 +141,56 @@ export function startApp(deps: AppDeps): void {
     scanFileList(files, progress).then(loadScan, scanFailed);
   });
 
-  const loadDemo = (): void => load(buildTree('demo-monorepo', demoCodebase(createRng(seed))));
+  /** Keep the address bar shareable: a loaded repo is in the URL, a local folder is not. */
+  const setRepoParam = (repo: RepoRef | null): void => {
+    const url = new URL(window.location.href);
+    if (repo) url.searchParams.set('repo', formatRepo(repo));
+    else url.searchParams.delete('repo');
+    window.history.replaceState(null, '', url);
+  };
+
+  let loadingRepo = false;
+  const loadRepo = async (input: string): Promise<void> => {
+    const repo = parseRepo(input);
+    if (!repo) {
+      welcome.classList.remove('gone');
+      status.textContent = 'Enter a public repo as owner/name or paste its GitHub URL.';
+      return;
+    }
+    if (loadingRepo) return;
+    loadingRepo = true;
+    welcome.classList.remove('gone');
+    status.textContent = `Fetching ${formatRepo(repo)} from GitHub…`;
+    try {
+      const result = await scanGithubRepo(repo, (p) => {
+        status.textContent = `Counting lines… ${p.files.toLocaleString()} files`;
+      });
+      setRepoParam(repo);
+      loadScan(result);
+    } catch (err) {
+      log.warn('github.failed', {
+        rateLimited: err instanceof GithubError && err.reason === 'rate-limited',
+      });
+      status.textContent =
+        err instanceof GithubError ? err.message : 'Could not load that repository.';
+    } finally {
+      loadingRepo = false;
+    }
+  };
+
+  for (const form of document.querySelectorAll<HTMLFormElement>('form[data-repo-form]'))
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const input = form.querySelector('input');
+      if (input) void loadRepo(input.value);
+    });
+  for (const b of document.querySelectorAll<HTMLButtonElement>('[data-example]'))
+    b.addEventListener('click', () => void loadRepo(b.dataset['example'] ?? ''));
+
+  const loadDemo = (): void => {
+    setRepoParam(null);
+    load(buildTree('demo-monorepo', demoCodebase(createRng(seed))));
+  };
 
   const setMode = (m: Mode): void => {
     if (m === mode && scene) return;
@@ -169,6 +221,7 @@ export function startApp(deps: AppDeps): void {
 
   window.addEventListener('keydown', (e) => {
     if (e.target instanceof HTMLInputElement) return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
     const m = MODES[Number(e.key) - 1];
     if (m && root) setMode(m);
     else if (e.key === ' ' && root) {
@@ -257,5 +310,6 @@ export function startApp(deps: AppDeps): void {
   };
   requestAnimationFrame(tick);
 
-  if (deps.config.demo) loadDemo();
+  if (deps.config.repo) void loadRepo(formatRepo(deps.config.repo));
+  else if (deps.config.demo) loadDemo();
 }

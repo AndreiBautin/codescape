@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { parseConfig, DEFAULT_CONFIG } from './config';
 import { demoCodebase } from './demo';
+import { estimateLines, formatRepo, parseRepo } from './github';
 import { isIgnoredPath } from './ignore';
 import { extensionOf, languageOf, OTHER } from './languages';
 import { createLogger, type Level } from './log';
@@ -74,6 +75,7 @@ describe('parseConfig', () => {
       speed: 2.5,
       seed: 42,
       demo: true,
+      repo: null,
     });
   });
 
@@ -161,5 +163,51 @@ describe('layoutPipes', () => {
     expect(
       layoutPipes(root, createRng(1), { maxSegments: 20, maxFilesPerDir: 99 }).segments,
     ).toHaveLength(20);
+  });
+});
+
+describe('parseRepo', () => {
+  it('accepts the forms people actually paste', () => {
+    expect(parseRepo('facebook/react')).toEqual({ owner: 'facebook', repo: 'react', ref: null });
+    expect(parseRepo(' https://github.com/facebook/react.git ')).toEqual({
+      owner: 'facebook',
+      repo: 'react',
+      ref: null,
+    });
+    expect(parseRepo('github.com/a/b/tree/feature/x?tab=readme')).toEqual({
+      owner: 'a',
+      repo: 'b',
+      ref: 'feature/x',
+    });
+    expect(parseRepo('a/b@v1.2')).toEqual({ owner: 'a', repo: 'b', ref: 'v1.2' });
+  });
+
+  it('refuses anything that is not a single owner/repo rather than guessing', () => {
+    for (const bad of [
+      '',
+      'react',
+      'a/b/c',
+      'https://gitlab.com/a/b',
+      '../etc/passwd',
+      'a/..',
+      'a b/c',
+    ])
+      expect(parseRepo(bad)).toBeNull();
+  });
+
+  it('round-trips through the URL parameter', () => {
+    const r = parseRepo('a/b@main');
+    expect(r && parseRepo(formatRepo(r))).toEqual(r);
+    expect(parseConfig('?repo=nonsense').warnings).toHaveLength(1);
+    expect(parseConfig('?repo=a%2Fb').config.repo).toEqual({ owner: 'a', repo: 'b', ref: null });
+  });
+});
+
+describe('estimateLines', () => {
+  it('scales by the sampled bytes-per-line and never reports zero for a non-empty file', () => {
+    expect(estimateLines(4000, 1000, 50)).toBe(200);
+    expect(estimateLines(5, 1000, 10)).toBe(1);
+    expect(estimateLines(0, 1000, 10)).toBe(0);
+    expect(estimateLines(320, 0, 0)).toBe(10);
   });
 });

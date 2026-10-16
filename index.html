@@ -4,6 +4,14 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#05060a" />
+    <meta
+      name="description"
+      content="A screensaver for your source code: point it at any public GitHub repo."
+    />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="icons/icon-192.png" />
+    <link rel="apple-touch-icon" href="icons/icon-192.png" />
     <title>Codescape</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link
@@ -40,7 +48,15 @@
         <button data-mode="mystify" role="tab"><kbd>3</kbd> Mystify</button>
       </div>
       <span class="sep"></span>
-      <button class="icon" id="btn-open" title="Open folder (O)">Open folder</button>
+      <form class="dock-repo" data-repo-form>
+        <input
+          type="text"
+          placeholder="owner/repo"
+          aria-label="Load a GitHub repository"
+          spellcheck="false"
+        />
+      </form>
+      <button class="icon" id="btn-open" title="Open local folder (O)">Folder</button>
       <button class="icon" id="btn-pause" title="Pause (Space)">Pause</button>
       <button class="icon" id="btn-full" title="Fullscreen (F)">Fullscreen</button>
     </nav>
@@ -56,11 +72,28 @@
         <div class="eyebrow">A screensaver for your source code</div>
         <h1>Codescape</h1>
         <p>
-          Point it at a folder and watch the codebase grow as pipes, fly past as stars, or ribbon
-          across the screen. Everything is read locally — nothing leaves your machine.
+          Point it at any public GitHub repo — or a folder on your machine — and watch the code grow
+          as pipes, fly past as stars, or ribbon across the screen.
         </p>
+        <form class="repo-form" data-repo-form>
+          <input
+            type="text"
+            name="repo"
+            placeholder="github.com/owner/repo"
+            aria-label="Public GitHub repository"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <button class="primary" type="submit">Visualize</button>
+        </form>
+        <div class="examples">
+          Try
+          <button data-example="facebook/react">facebook/react</button>
+          <button data-example="microsoft/vscode">microsoft/vscode</button>
+          <button data-example="torvalds/linux">torvalds/linux</button>
+        </div>
         <div class="actions">
-          <button class="primary" id="welcome-open">Open a folder</button>
+          <button class="ghost" id="welcome-open">Open a local folder</button>
           <button class="ghost" id="welcome-demo">Watch the demo</button>
         </div>
         <div class="hint" id="welcome-status">or drop a folder anywhere on this window</div>
