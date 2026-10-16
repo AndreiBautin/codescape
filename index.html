@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark" />
+    <title>Codescape</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div id="stage"></div>
+    <div class="vignette"></div>
+
+    <header class="brand chrome">
+      <div class="mark"></div>
+      <div>
+        <div class="wordmark">Codescape</div>
+        <div class="subtitle" id="root-name">No codebase loaded</div>
+      </div>
+    </header>
+
+    <aside class="stats glass chrome" id="stats" hidden>
+      <div class="stat-row">
+        <div><span class="num" id="s-files">0</span><span class="lbl">files</span></div>
+        <div><span class="num" id="s-lines">0</span><span class="lbl">lines</span></div>
+        <div><span class="num" id="s-dirs">0</span><span class="lbl">folders</span></div>
+      </div>
+      <div class="langbar" id="langbar"></div>
+      <ul class="legend" id="legend"></ul>
+    </aside>
+
+    <nav class="dock glass chrome" id="dock" hidden>
+      <div class="segmented" role="tablist">
+        <button data-mode="pipes" role="tab"><kbd>1</kbd> Pipes</button>
+        <button data-mode="starfield" role="tab"><kbd>2</kbd> Starfield</button>
+        <button data-mode="mystify" role="tab"><kbd>3</kbd> Mystify</button>
+      </div>
+      <span class="sep"></span>
+      <button class="icon" id="btn-open" title="Open folder (O)">Open folder</button>
+      <button class="icon" id="btn-pause" title="Pause (Space)">Pause</button>
+      <button class="icon" id="btn-full" title="Fullscreen (F)">Fullscreen</button>
+    </nav>
+
+    <div class="tooltip glass" id="tooltip" hidden>
+      <div class="tt-name"><span class="dot"></span><span id="tt-name"></span></div>
+      <div class="tt-path" id="tt-path"></div>
+      <div class="tt-meta" id="tt-meta"></div>
+    </div>
+
+    <section class="welcome" id="welcome">
+      <div class="welcome-card glass">
+        <div class="eyebrow">A screensaver for your source code</div>
+        <h1>Codescape</h1>
+        <p>
+          Point it at a folder and watch the codebase grow as pipes, fly past as stars, or ribbon
+          across the screen. Everything is read locally — nothing leaves your machine.
+        </p>
+        <div class="actions">
+          <button class="primary" id="welcome-open">Open a folder</button>
+          <button class="ghost" id="welcome-demo">Watch the demo</button>
+        </div>
+        <div class="hint" id="welcome-status">or drop a folder anywhere on this window</div>
+      </div>
+    </section>
+
+    <input type="file" id="folder-input" webkitdirectory multiple hidden />
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
