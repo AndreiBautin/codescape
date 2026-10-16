@@ -2,7 +2,7 @@ import { parseRepo, type RepoRef } from './github';
 
 /** Configuration comes from the URL query string. Parsing is total: a bad value falls back to its
  *  documented default with a warning, never an exception. */
-export const MODES = ['pipes', 'starfield', 'mystify'] as const;
+export const MODES = ['pipes', 'starfield', 'mystify', 'windows', 'beziers', 'flowerbox'] as const;
 export type Mode = (typeof MODES)[number];
 
 export interface Config {

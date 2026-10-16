@@ -121,6 +121,9 @@ export function createMystifyScene(ctx: SceneContext): Scene {
       }
       return hovered ? { node: hovered.dir, color: hovered.color } : null;
     },
+    legend() {
+      return shapes.map((s) => ({ label: s.dir.path || s.dir.name, color: s.color }));
+    },
     dispose() {
       canvas.remove();
     },

@@ -385,3 +385,31 @@ body.dragging .welcome-card {
   background: rgba(0, 0, 0, 0.25);
   font-size: 12px;
 }
+
+.legend-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.legend li b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.crumb {
+  font: inherit;
+  color: #9fc2ff;
+  padding: 0;
+}
+.crumb:disabled {
+  color: var(--muted);
+  cursor: default;
+}
+.crumb:not(:disabled):hover {
+  text-decoration: underline;
+}
+#stage {
+  cursor: pointer;
+}

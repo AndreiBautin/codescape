@@ -10,6 +10,9 @@ import { createMystifyScene } from '../scenes/mystify';
 import { createPipesScene } from '../scenes/pipes';
 import { formatNode, type Scene, type SceneContext } from '../scenes/scene';
 import { createStarfieldScene } from '../scenes/starfield';
+import { createBeziersScene } from '../scenes/beziers';
+import { createFlowerBoxScene } from '../scenes/flowerBox';
+import { createFlyingFilesScene } from '../scenes/flyingFiles';
 
 const IDLE_MS = 3000;
 
@@ -17,6 +20,9 @@ const FACTORIES: Record<Mode, (ctx: SceneContext) => Scene> = {
   pipes: createPipesScene,
   starfield: createStarfieldScene,
   mystify: createMystifyScene,
+  windows: createFlyingFilesScene,
+  beziers: createBeziersScene,
+  flowerbox: createFlowerBoxScene,
 };
 
 export interface AppDeps {
@@ -46,6 +52,9 @@ export function startApp(deps: AppDeps): void {
 
   let mode: Mode = deps.config.mode;
   let root: DirNode | null = null;
+  /** The folder currently drilled into; null = the whole codebase. */
+  let focus: DirNode | null = null;
+  let repoRef: RepoRef | null = null;
   let scene: Scene | null = null;
   let paused = false;
   let seed = deps.seed;
@@ -55,7 +64,10 @@ export function startApp(deps: AppDeps): void {
     scene?.dispose();
     stage.replaceChildren();
     // A fresh rng per mount so switching modes back and forth replays the same scene.
-    scene = FACTORIES[mode]({ host: stage, root, rng: createRng(seed) });
+    const shown = focus ?? root;
+    scene = FACTORIES[mode]({ host: stage, root: shown, rng: createRng(seed) });
+    renderCrumbs();
+    renderLegend(shown);
     scene.resize(window.innerWidth, window.innerHeight);
     for (const b of document.querySelectorAll<HTMLButtonElement>('[data-mode]'))
       b.setAttribute('aria-selected', String(b.dataset['mode'] === mode));
@@ -64,6 +76,7 @@ export function startApp(deps: AppDeps): void {
 
   const load = (tree: DirNode): void => {
     root = tree;
+    focus = null;
     const s = summarize(tree);
     $('root-name').textContent = tree.name;
     $('s-files').textContent = compact(s.files);
@@ -78,24 +91,101 @@ export function startApp(deps: AppDeps): void {
         return span;
       }),
     );
-    $('legend').replaceChildren(
-      ...s.languages.slice(0, 5).map((l) => {
-        const li = document.createElement('li');
-        const dot = document.createElement('i');
-        dot.style.background = dot.style.color = l.language.color;
-        const name = document.createElement('b');
-        name.textContent = l.language.name;
-        const pct = document.createElement('span');
-        pct.textContent = `${Math.round((l.lines / total) * 100)}%`;
-        li.append(dot, name, pct);
-        return li;
-      }),
-    );
     $('stats').hidden = false;
     $('dock').hidden = false;
     welcome.classList.add('gone');
     mount();
   };
+
+  const legendRow = (label: string, color: string, value: string): HTMLLIElement => {
+    const li = document.createElement('li');
+    const dot = document.createElement('i');
+    dot.style.background = dot.style.color = color;
+    const name = document.createElement('b');
+    name.textContent = label;
+    const pct = document.createElement('span');
+    pct.textContent = value;
+    li.append(dot, name, pct);
+    return li;
+  };
+
+  /** Folder colours when the scene encodes folders; languages otherwise. */
+  const renderLegend = (shown: DirNode): void => {
+    const folders = scene?.legend?.();
+    const total = Math.max(1, shown.lines);
+    $('legend-title').textContent = folders ? 'Folders' : 'Languages';
+    $('legend').replaceChildren(
+      ...(folders
+        ? folders.slice(0, 8).map((f) => legendRow(f.label, f.color, ''))
+        : summarize(shown)
+            .languages.slice(0, 5)
+            .map((l) =>
+              legendRow(
+                l.language.name,
+                l.language.color,
+                `${Math.round((l.lines / total) * 100)}%`,
+              ),
+            )),
+    );
+  };
+
+  /** Folders from the root down to `target`, inclusive. */
+  const chainTo = (target: DirNode | null): DirNode[] => {
+    if (!root) return [];
+    const chain: DirNode[] = [root];
+    if (!target) return chain;
+    let at: DirNode = root;
+    for (const part of target.path.split('/')) {
+      const next = at.children.find((c): c is DirNode => c.kind === 'dir' && c.name === part);
+      if (!next) break;
+      chain.push(next);
+      at = next;
+    }
+    return chain;
+  };
+
+  const parentOf = (d: DirNode): DirNode | null => {
+    const chain = chainTo(d);
+    const parent = chain[chain.length - 2];
+    return !parent || parent === root ? null : parent;
+  };
+
+  /** Breadcrumb from the root to the focused folder; each crumb climbs back up. */
+  const renderCrumbs = (): void => {
+    const el = $('root-name');
+    el.replaceChildren();
+    const chain = chainTo(focus);
+    chain.forEach((d, i) => {
+      if (i > 0) el.append(' / ');
+      const b = document.createElement('button');
+      b.className = 'crumb';
+      b.textContent = d.name;
+      b.disabled = i === chain.length - 1;
+      b.addEventListener('click', () => {
+        focus = d === root ? null : d;
+        mount();
+      });
+      el.append(b);
+    });
+  };
+
+  const githubUrl = (path: string): string | null =>
+    repoRef
+      ? `https://github.com/${repoRef.owner}/${repoRef.repo}/blob/${repoRef.ref ?? 'HEAD'}/${path}`
+      : null;
+
+  /** Click a folder to drill into it; click a file to open it on GitHub. */
+  stage.addEventListener('click', (e) => {
+    const hit = scene?.pointer(e.clientX, e.clientY);
+    if (!hit) return;
+    if (hit.node.kind === 'dir' && hit.node.children.length > 0 && hit.node !== (focus ?? root)) {
+      focus = hit.node;
+      mount();
+    } else if (hit.node.kind === 'file') {
+      const url = githubUrl(hit.node.path);
+      if (url) window.open(url, '_blank', 'noopener');
+    }
+  });
 
   const loadScan = (result: ScanResult): void => {
     log.info('scan.done', { files: result.entries.length, truncated: result.truncated });
@@ -143,6 +233,7 @@ export function startApp(deps: AppDeps): void {
 
   /** Keep the address bar shareable: a loaded repo is in the URL, a local folder is not. */
   const setRepoParam = (repo: RepoRef | null): void => {
+    if (!repo) repoRef = null;
     const url = new URL(window.location.href);
     if (repo) url.searchParams.set('repo', formatRepo(repo));
     else url.searchParams.delete('repo');
@@ -166,6 +257,7 @@ export function startApp(deps: AppDeps): void {
         status.textContent = `Counting lines… ${p.files.toLocaleString()} files`;
       });
       setRepoParam(repo);
+      repoRef = repo;
       loadScan(result);
     } catch (err) {
       log.warn('github.failed', {
@@ -224,7 +316,10 @@ export function startApp(deps: AppDeps): void {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     const m = MODES[Number(e.key) - 1];
     if (m && root) setMode(m);
-    else if (e.key === ' ' && root) {
+    else if ((e.key === 'Escape' || e.key === 'Backspace') && focus && root) {
+      focus = parentOf(focus);
+      mount();
+    } else if (e.key === ' ' && root) {
       e.preventDefault();
       togglePause();
     } else if (e.key === 'f' || e.key === 'F') toggleFull();

@@ -149,6 +149,9 @@ export function createPipesScene(ctx: SceneContext): Scene {
         color: layout.pipes[segment.pipe]?.color ?? '#fff',
       } satisfies Hover;
     },
+    legend() {
+      return layout.pipes.map((p) => ({ label: p.name, color: p.color }));
+    },
     dispose() {
       controls.dispose();
       cylinder.dispose();

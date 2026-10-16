@@ -14,7 +14,14 @@ export interface Scene {
   frame(dt: number): void;
   /** Pointer in CSS pixels relative to the canvas, or null when it leaves. */
   pointer(x: number, y: number): Hover | null;
+  /** Which colour means which folder, when colour encodes folders rather than languages. */
+  legend?(): readonly LegendItem[];
   dispose(): void;
+}
+
+export interface LegendItem {
+  readonly label: string;
+  readonly color: string;
 }
 
 export interface SceneContext {
