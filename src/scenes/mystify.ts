@@ -1,5 +1,6 @@
 import { PIPE_COLORS } from '../core/pipesLayout';
-import type { DirNode } from '../core/tree';
+import type { DirNode, TreeNode } from '../core/tree';
+import { CYCLE_COLOR, FLOW_COLOR, drawFlow } from './flow';
 import { createCanvas2D } from './canvas2d';
 import type { Scene, SceneContext } from './scene';
 
@@ -37,6 +38,23 @@ export function createMystifyScene(ctx: SceneContext): Scene {
   }));
   let pointer: { x: number; y: number } | null = null;
   let hovered: Shape | null = null;
+  let pinned: TreeNode | null = null;
+  let t = 0;
+  // Module edges between the folders that have a shape; drawn centroid to centroid.
+  const shapeOf = new Map<number, number>();
+  ctx.graph.modules.forEach((m, i) => {
+    const s = shapes.findIndex((sh) => sh.dir.path === m.path && m.node !== null);
+    if (s >= 0) shapeOf.set(i, s);
+  });
+  const flows = ctx.graph.edges.flatMap((e) => {
+    const a = shapeOf.get(e.from);
+    const b = shapeOf.get(e.to);
+    return a === undefined || b === undefined ? [] : [{ a, b, weight: e.weight, cycle: e.inCycle }];
+  });
+  const centroid = (s: Shape): { x: number; y: number } => ({
+    x: s.pts.reduce((n, p) => n + p.x, 0) / s.pts.length,
+    y: s.pts.reduce((n, p) => n + p.y, 0) / s.pts.length,
+  });
 
   return {
     resize(width, height) {
@@ -51,6 +69,7 @@ export function createMystifyScene(ctx: SceneContext): Scene {
       resize(width, height);
     },
     frame(dt) {
+      t += dt;
       g.fillStyle = '#05060a';
       g.fillRect(0, 0, w, h);
       for (const s of shapes) {
@@ -96,6 +115,24 @@ export function createMystifyScene(ctx: SceneContext): Scene {
       }
       g.globalAlpha = 1;
       g.shadowBlur = 0;
+      const active = hovered ?? shapes.find((s) => s.dir === pinned) ?? null;
+      for (const f of flows) {
+        const a = shapes[f.a];
+        const b = shapes[f.b];
+        if (!a || !b) continue;
+        const ca = centroid(a);
+        const cb = centroid(b);
+        const lit = !active || active === a || active === b;
+        drawFlow(g, ca.x, ca.y, cb.x, cb.y, {
+          weight: f.weight,
+          color: f.cycle ? CYCLE_COLOR : FLOW_COLOR,
+          time: t,
+          alpha: lit ? 0.95 : 0.15,
+        });
+      }
+    },
+    pin(node) {
+      pinned = node;
     },
     pointer(x, y) {
       if (x < 0) {

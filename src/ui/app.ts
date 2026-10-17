@@ -2,8 +2,11 @@ import { MODES, isMode, type Config, type Mode } from '../core/config';
 import { demoCodebase } from '../core/demo';
 import { formatRepo, parseRepo, type RepoRef } from '../core/github';
 import type { Logger } from '../core/log';
+import { moduleGraph, resolveEdges, type FileEdge, type ModuleGraph } from '../core/graph';
+import { hasImports } from '../core/imports';
 import { createRng } from '../core/rng';
-import { buildTree, summarize, type DirNode } from '../core/tree';
+import { buildTree, summarize, type DirNode, type FileEntry, type TreeNode } from '../core/tree';
+import { renderInspector } from './inspector';
 import { GithubError, scanGithubRepo } from '../scan/scanGithub';
 import { scanDirectoryHandle, scanFileList, type ScanResult } from '../scan/scanFolder';
 import { createMystifyScene } from '../scenes/mystify';
@@ -55,6 +58,11 @@ export function startApp(deps: AppDeps): void {
   /** The folder currently drilled into; null = the whole codebase. */
   let focus: DirNode | null = null;
   let repoRef: RepoRef | null = null;
+  let edges: FileEdge[] = [];
+  let graph: ModuleGraph | null = null;
+  let selected: TreeNode | null = null;
+  let analysed = 0;
+  let analysable = 0;
   let scene: Scene | null = null;
   let paused = false;
   let seed = deps.seed;
@@ -65,18 +73,30 @@ export function startApp(deps: AppDeps): void {
     stage.replaceChildren();
     // A fresh rng per mount so switching modes back and forth replays the same scene.
     const shown = focus ?? root;
-    scene = FACTORIES[mode]({ host: stage, root: shown, rng: createRng(seed) });
+    graph = moduleGraph(shown, edges);
+    scene = FACTORIES[mode]({ host: stage, root: shown, rng: createRng(seed), edges, graph });
+    // A selection outside the folder now shown no longer means anything here.
+    if (selected && shown.path !== '' && !selected.path.startsWith(`${shown.path}/`))
+      selected = null;
+    scene.pin(selected);
     renderCrumbs();
     renderLegend(shown);
+    renderPanel();
     scene.resize(window.innerWidth, window.innerHeight);
     for (const b of document.querySelectorAll<HTMLButtonElement>('[data-mode]'))
       b.setAttribute('aria-selected', String(b.dataset['mode'] === mode));
     log.info('scene.mounted', { mode: MODES.indexOf(mode), files: root.files });
   };
 
-  const load = (tree: DirNode): void => {
+  const load = (tree: DirNode, entries: readonly FileEntry[]): void => {
     root = tree;
     focus = null;
+    selected = null;
+    edges = resolveEdges(
+      entries,
+      entries.map((e) => e.path),
+    );
+    log.info('graph.built', { edges: edges.length, analysed, analysable });
     const s = summarize(tree);
     $('root-name').textContent = tree.name;
     $('s-files').textContent = compact(s.files);
@@ -161,30 +181,52 @@ export function startApp(deps: AppDeps): void {
       b.className = 'crumb';
       b.textContent = d.name;
       b.disabled = i === chain.length - 1;
-      b.addEventListener('click', () => {
-        focus = d === root ? null : d;
-        mount();
-      });
+      b.addEventListener('click', () => drill(d));
       el.append(b);
     });
   };
 
-  const githubUrl = (path: string): string | null =>
-    repoRef
+  const renderPanel = (): void => {
+    if (!root || !graph) return;
+    renderInspector(
+      $('inspector'),
+      { scope: focus ?? root, graph, edges, selected, analysed, analysable },
+      { select, drill, githubUrl },
+    );
+    $('inspector').hidden = false;
+  };
+
+  function select(node: TreeNode | null): void {
+    selected = node;
+    scene?.pin(node);
+    renderPanel();
+  }
+
+  function drill(dir: DirNode): void {
+    focus = dir === root ? null : dir;
+    selected = null;
+    mount();
+  }
+
+  function githubUrl(path: string): string | null {
+    return repoRef
       ? `https://github.com/${repoRef.owner}/${repoRef.repo}/blob/${repoRef.ref ?? 'HEAD'}/${path}`
       : null;
+  }
 
-  /** Click a folder to drill into it; click a file to open it on GitHub. */
+  /** Click inspects; double-click opens a folder. A drag (orbiting the 3D modes) selects nothing. */
+  let downAt: { x: number; y: number } | null = null;
+  stage.addEventListener('pointerdown', (e) => {
+    downAt = { x: e.clientX, y: e.clientY };
+  });
   stage.addEventListener('click', (e) => {
+    if (downAt && Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) > 5) return;
+    select(scene?.pointer(e.clientX, e.clientY)?.node ?? null);
+  });
+  stage.addEventListener('dblclick', (e) => {
     const hit = scene?.pointer(e.clientX, e.clientY);
-    if (!hit) return;
-    if (hit.node.kind === 'dir' && hit.node.children.length > 0 && hit.node !== (focus ?? root)) {
-      focus = hit.node;
-      mount();
-    } else if (hit.node.kind === 'file') {
-      const url = githubUrl(hit.node.path);
-      if (url) window.open(url, '_blank', 'noopener');
-    }
+    if (hit?.node.kind === 'dir' && hit.node.children.length > 0 && hit.node !== (focus ?? root))
+      drill(hit.node);
   });
 
   const loadScan = (result: ScanResult): void => {
@@ -194,7 +236,9 @@ export function startApp(deps: AppDeps): void {
       welcome.classList.remove('gone');
       return;
     }
-    load(buildTree(result.rootName, result.entries));
+    analysed = result.analysed;
+    analysable = result.analysable;
+    load(buildTree(result.rootName, result.entries), result.entries);
   };
 
   const progress = (p: { files: number }): void => {
@@ -281,7 +325,9 @@ export function startApp(deps: AppDeps): void {
 
   const loadDemo = (): void => {
     setRepoParam(null);
-    load(buildTree('demo-monorepo', demoCodebase(createRng(seed))));
+    const entries = demoCodebase(createRng(seed));
+    analysed = analysable = entries.filter((e) => hasImports(e.path)).length;
+    load(buildTree('demo-monorepo', entries), entries);
   };
 
   const setMode = (m: Mode): void => {
@@ -316,8 +362,10 @@ export function startApp(deps: AppDeps): void {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     const m = MODES[Number(e.key) - 1];
     if (m && root) setMode(m);
+    else if (e.key === 'Escape' && selected) select(null);
     else if ((e.key === 'Escape' || e.key === 'Backspace') && focus && root) {
       focus = parentOf(focus);
+      selected = null;
       mount();
     } else if (e.key === ' ' && root) {
       e.preventDefault();

@@ -1,4 +1,5 @@
-import { walk, type FileNode } from '../core/tree';
+import { walk, type FileNode, type TreeNode } from '../core/tree';
+import { drawLinks } from './flow';
 import { createCanvas2D } from './canvas2d';
 import type { Scene, SceneContext } from './scene';
 
@@ -60,6 +61,8 @@ export function createStarfieldScene(ctx: SceneContext): Scene {
   let tx = 0.5;
   let ty = 0.5;
   let hovered: Star | null = null;
+  let pinned: TreeNode | null = null;
+  let t = 0;
 
   return {
     resize(width, height) {
@@ -100,6 +103,19 @@ export function createStarfieldScene(ctx: SceneContext): Scene {
         g.stroke();
       }
       g.globalAlpha = 1;
+      t += dt;
+      drawLinks(
+        g,
+        stars.map((s) => ({
+          path: s.node.path,
+          x: s.sx,
+          y: s.sy,
+          alpha: Number.isNaN(s.sx) ? 0 : 1 - s.z,
+        })),
+        ctx.edges,
+        hovered?.node ?? pinned,
+        t,
+      );
       if (hovered && !Number.isNaN(hovered.sx)) {
         g.strokeStyle = hovered.node.language.color;
         g.lineWidth = 1.5;
@@ -127,6 +143,9 @@ export function createStarfieldScene(ctx: SceneContext): Scene {
       }
       hovered = best;
       return best ? { node: best.node, color: best.node.language.color } : null;
+    },
+    pin(node) {
+      pinned = node;
     },
     dispose() {
       canvas.remove();

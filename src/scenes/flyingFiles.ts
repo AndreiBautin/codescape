@@ -1,5 +1,6 @@
 import { extensionOf } from '../core/languages';
-import { walk, type FileNode } from '../core/tree';
+import { walk, type FileNode, type TreeNode } from '../core/tree';
+import { drawLinks, fileAdjacency } from './flow';
 import { createCanvas2D } from './canvas2d';
 import type { Scene, SceneContext } from './scene';
 
@@ -26,14 +27,26 @@ export function createFlyingFilesScene(ctx: SceneContext): Scene {
   for (const { node } of walk(ctx.root)) if (node.kind === 'file') files.push(node);
   if (files.length === 0) throw new Error('no files');
 
+  const byPath = new Map(files.map((f) => [f.path, f]));
+  const adjacency = fileAdjacency(ctx.edges);
+  const linked = files.filter((f) => adjacency.has(f.path));
+  // Half the time, launch a file that an on-screen card imports or is imported by, so the
+  // dependency links have something to connect; otherwise any file that has links at all.
+  const nextFile = (): FileNode => {
+    const anchor = cards.length > 0 ? rng.pick(cards).node : null;
+    const near = anchor ? (adjacency.get(anchor.path) ?? []) : [];
+    if (near.length > 0 && rng.next() < 0.5) return byPath.get(rng.pick(near)) ?? rng.pick(files);
+    return linked.length > 0 && rng.next() < 0.7 ? rng.pick(linked) : rng.pick(files);
+  };
+  const cards: Card[] = [];
   const reset = (c: Card, far: boolean): void => {
-    c.node = rng.pick(files);
+    c.node = nextFile();
     c.x = rng.range(-1.2, 1.2);
     c.y = rng.range(-0.9, 0.9);
     c.z = far ? 1 : rng.range(0.1, 1);
     c.spin = rng.range(-1, 1);
   };
-  const cards: Card[] = Array.from({ length: COUNT }, () => {
+  for (let i = 0; i < COUNT; i++) {
     const c: Card = {
       node: rng.pick(files),
       x: 0,
@@ -45,13 +58,14 @@ export function createFlyingFilesScene(ctx: SceneContext): Scene {
       size: 0,
     };
     reset(c, false);
-    return c;
-  });
+    cards.push(c);
+  }
 
   let w = 1;
   let h = 1;
   let t = 0;
   let hovered: Card | null = null;
+  let pinned: TreeNode | null = null;
   let cx = 0.5;
   let cy = 0.5;
   let tx = 0.5;
@@ -137,6 +151,18 @@ export function createFlyingFilesScene(ctx: SceneContext): Scene {
       // Far cards first so near ones overlap them.
       for (const c of [...cards].sort((a, b) => b.z - a.z)) drawCard(c);
       g.globalAlpha = 1;
+      drawLinks(
+        g,
+        cards.map((c) => ({
+          path: c.node.path,
+          x: c.sx,
+          y: c.sy,
+          alpha: Math.min(1, (1 - c.z) * 1.6),
+        })),
+        ctx.edges,
+        hovered?.node ?? pinned,
+        t,
+      );
     },
     pointer(x, y) {
       hovered = null;
@@ -155,6 +181,9 @@ export function createFlyingFilesScene(ctx: SceneContext): Scene {
         }
       }
       return hovered ? { node: hovered.node, color: hovered.node.language.color } : null;
+    },
+    pin(node) {
+      pinned = node;
     },
     dispose() {
       canvas.remove();

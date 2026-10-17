@@ -1,5 +1,6 @@
 import { PIPE_COLORS } from '../core/pipesLayout';
-import type { DirNode } from '../core/tree';
+import type { DirNode, TreeNode } from '../core/tree';
+import { CYCLE_COLOR, FLOW_COLOR, drawFlow } from './flow';
 import { createCanvas2D } from './canvas2d';
 import type { Scene, SceneContext } from './scene';
 
@@ -36,6 +37,27 @@ export function createBeziersScene(ctx: SceneContext): Scene {
   }));
   let hovered: Curve | null = null;
   let pointer: { x: number; y: number } | null = null;
+  let pinned: TreeNode | null = null;
+  let t = 0;
+  const curveOf = new Map<number, number>();
+  ctx.graph.modules.forEach((m, i) => {
+    const c = curves.findIndex((cv) => cv.dir.path === m.path && m.node !== null);
+    if (c >= 0) curveOf.set(i, c);
+  });
+  const flows = ctx.graph.edges.flatMap((e) => {
+    const a = curveOf.get(e.from);
+    const b = curveOf.get(e.to);
+    return a === undefined || b === undefined ? [] : [{ a, b, weight: e.weight, cycle: e.inCycle }];
+  });
+  /** The point halfway along a curve's newest stroke. */
+  const midpoint = (c: Curve): { x: number; y: number } => {
+    const p = c.history[0] ?? [];
+    const at = (k: number): number => p[k] ?? 0;
+    return {
+      x: 0.125 * at(0) + 0.375 * at(2) + 0.375 * at(4) + 0.125 * at(6),
+      y: 0.125 * at(1) + 0.375 * at(3) + 0.375 * at(5) + 0.125 * at(7),
+    };
+  };
 
   const path = (p: number[]): void => {
     g.beginPath();
@@ -55,6 +77,7 @@ export function createBeziersScene(ctx: SceneContext): Scene {
       resize(width, height);
     },
     frame(dt) {
+      t += dt;
       g.fillStyle = '#05060a';
       g.fillRect(0, 0, w, h);
       g.globalCompositeOperation = 'lighter';
@@ -99,6 +122,23 @@ export function createBeziersScene(ctx: SceneContext): Scene {
       g.globalCompositeOperation = 'source-over';
       g.globalAlpha = 1;
       g.shadowBlur = 0;
+      const active = hovered ?? curves.find((c) => c.dir === pinned) ?? null;
+      for (const f of flows) {
+        const a = curves[f.a];
+        const b = curves[f.b];
+        if (!a || !b) continue;
+        const ma = midpoint(a);
+        const mb = midpoint(b);
+        drawFlow(g, ma.x, ma.y, mb.x, mb.y, {
+          weight: f.weight,
+          color: f.cycle ? CYCLE_COLOR : FLOW_COLOR,
+          time: t,
+          alpha: !active || active === a || active === b ? 0.95 : 0.15,
+        });
+      }
+    },
+    pin(node) {
+      pinned = node;
     },
     pointer(x, y) {
       hovered = null;

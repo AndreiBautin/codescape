@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { walk, type DirNode, type TreeNode } from '../core/tree';
+import { neighbourPaths } from './flow';
+import { createFlows3D } from './flow3d';
 import type { Scene, SceneContext } from './scene';
 
 const MAX_PETALS = 160;
@@ -57,7 +59,20 @@ export function createFlowerBoxScene(ctx: SceneContext): Scene {
     (node.kind === 'dir' ? nodes : files).push(node);
   }
   files.sort((a, b) => b.lines - a.lines);
-  const chosen = [...nodes, ...files].slice(0, MAX_PETALS);
+  const picked = [...nodes, ...files].slice(0, MAX_PETALS);
+  // Spread the top-level folders evenly over the sphere, so the module arcs between them wrap
+  // the whole bloom instead of bunching at one pole.
+  const tops = picked.filter((n) => n.kind === 'dir' && ctx.root.children.includes(n));
+  const rest = picked.filter((n) => !tops.includes(n));
+  const chosen: TreeNode[] = [];
+  const stride = tops.length > 0 ? picked.length / tops.length : Infinity;
+  for (let i = 0, t = 0; i < picked.length; i++) {
+    const top = tops[t];
+    if (top && i >= Math.round(t * stride + stride / 2)) {
+      chosen.push(top);
+      t++;
+    } else chosen.push(rest.shift() ?? (tops[t++] as TreeNode));
+  }
   const maxLines = Math.max(1, ...chosen.map((n) => n.lines));
 
   const cone = new THREE.ConeGeometry(0.14, 1, 10, 1, true);
@@ -107,6 +122,38 @@ export function createFlowerBoxScene(ctx: SceneContext): Scene {
     };
   });
 
+  // Module arcs run over the outside of the bloom between the top-level folders' petals.
+  const flows = createFlows3D(scene, new THREE.Vector3(0, 0, 0), 2.5, 0.08);
+  const tipOf = new Map<string, THREE.Vector3>();
+  for (const p of petals)
+    tipOf.set(p.node.path, p.dir.clone().multiplyScalar(1.5 + p.length * 0.55));
+  flows.setArcs(
+    ctx.graph.edges.flatMap((e) => {
+      const a = ctx.graph.modules[e.from];
+      const b = ctx.graph.modules[e.to];
+      const from = a?.node ? tipOf.get(a.path) : undefined;
+      const to = b?.node ? tipOf.get(b.path) : undefined;
+      return from && to ? [{ from, to, weight: e.weight, cycle: e.inCycle }] : [];
+    }),
+  );
+  let pinned: TreeNode | null = null;
+  let shown: TreeNode | null = null;
+  const showLinks = (node: TreeNode | null): void => {
+    if (node === shown) return;
+    shown = node;
+    const here = node ? tipOf.get(node.path) : undefined;
+    if (!node || !here) {
+      flows.setLinks([]);
+      return;
+    }
+    const pairs: [THREE.Vector3, THREE.Vector3][] = [];
+    for (const p of neighbourPaths(node, ctx.edges)) {
+      const there = tipOf.get(p);
+      if (there) pairs.push([here, there]);
+    }
+    flows.setLinks(pairs);
+  };
+
   const raycaster = new THREE.Raycaster();
   const ndc = new THREE.Vector2();
   let width = 1;
@@ -131,13 +178,17 @@ export function createFlowerBoxScene(ctx: SceneContext): Scene {
         const grow = p === hovered ? 1.35 : 1;
         p.mesh.scale.set(grow, Math.max(0.05, p.length * bloom * wave * grow), grow);
       }
+      flows.update(dt);
       core.scale.setScalar(1 + 0.08 * Math.sin(t * 1.6));
       controls.update();
       renderer.render(scene, camera);
     },
     pointer(x, y) {
       hovered = null;
-      if (x < 0) return null;
+      if (x < 0) {
+        showLinks(pinned);
+        return null;
+      }
       ndc.set((x / width) * 2 - 1, -(y / height) * 2 + 1);
       raycaster.setFromCamera(ndc, camera);
       const hit = raycaster.intersectObjects(
@@ -146,11 +197,17 @@ export function createFlowerBoxScene(ctx: SceneContext): Scene {
       )[0];
       const i = hit?.object.userData['i'];
       hovered = typeof i === 'number' ? (petals[i] ?? null) : null;
+      showLinks(hovered?.node ?? pinned);
       if (!hovered) return null;
       const m = hovered.mesh.material as THREE.MeshPhysicalMaterial;
       return { node: hovered.node, color: `#${m.color.getHexString()}` };
     },
+    pin(node) {
+      pinned = node;
+      if (!hovered) showLinks(node);
+    },
     dispose() {
+      flows.dispose();
       controls.dispose();
       cone.dispose();
       core.geometry.dispose();

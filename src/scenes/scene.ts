@@ -1,4 +1,5 @@
 import type { Rng } from '../core/rng';
+import type { FileEdge, ModuleGraph } from '../core/graph';
 import type { DirNode, TreeNode } from '../core/tree';
 
 export interface Hover {
@@ -16,6 +17,8 @@ export interface Scene {
   pointer(x: number, y: number): Hover | null;
   /** Which colour means which folder, when colour encodes folders rather than languages. */
   legend?(): readonly LegendItem[];
+  /** Keep this node's dependency links drawn while nothing is hovered (the inspector selection). */
+  pin(node: TreeNode | null): void;
   dispose(): void;
 }
 
@@ -28,6 +31,10 @@ export interface SceneContext {
   readonly host: HTMLElement;
   readonly root: DirNode;
   readonly rng: Rng;
+  /** Every resolved import in the codebase. */
+  readonly edges: readonly FileEdge[];
+  /** Imports rolled up to the direct children of `root`. */
+  readonly graph: ModuleGraph;
 }
 
 export function formatNode(node: TreeNode): string {
