@@ -1,4 +1,5 @@
 import { isIgnoredDir, isIgnoredPath } from '../core/ignore';
+import { extractImports, hasImports } from '../core/imports';
 import { isTextual } from '../core/languages';
 import type { FileEntry } from '../core/tree';
 
@@ -15,6 +16,10 @@ export interface ScanResult {
   readonly rootName: string;
   readonly entries: FileEntry[];
   readonly truncated: boolean;
+  /** Source files whose imports were read. */
+  readonly analysed: number;
+  /** Source files whose imports could have been read. */
+  readonly analysable: number;
 }
 
 /** Everything is read locally in the browser; nothing about the folder leaves the machine. */
@@ -26,9 +31,22 @@ export function countLines(text: string): number {
 }
 
 async function entryFor(path: string, file: File): Promise<FileEntry> {
-  const lines = isTextual(path) && file.size <= MAX_READ_BYTES ? countLines(await file.text()) : 0;
-  return { path, bytes: file.size, lines };
+  if (!isTextual(path) || file.size > MAX_READ_BYTES)
+    return { path, bytes: file.size, lines: 0, imports: [] };
+  const text = await file.text();
+  return {
+    path,
+    bytes: file.size,
+    lines: countLines(text),
+    imports: hasImports(path) ? extractImports(path, text) : [],
+  };
 }
+
+/** A local scan reads every source file, so everything analysable was analysed. */
+const analysis = (entries: readonly FileEntry[]): { analysed: number; analysable: number } => {
+  const n = entries.filter((e) => hasImports(e.path)).length;
+  return { analysed: n, analysable: n };
+};
 
 /** File System Access API (Chromium). */
 export async function scanDirectoryHandle(
@@ -54,7 +72,7 @@ export async function scanDirectoryHandle(
     }
   };
   await visit(handle, '');
-  return { rootName: handle.name, entries, truncated };
+  return { rootName: handle.name, entries, truncated, ...analysis(entries) };
 }
 
 /** <input webkitdirectory> fallback for browsers without showDirectoryPicker. */
@@ -78,5 +96,5 @@ export async function scanFileList(
     entries.push(await entryFor(path, file));
     if (entries.length % 200 === 0) onProgress({ files: entries.length });
   }
-  return { rootName, entries, truncated };
+  return { rootName, entries, truncated, ...analysis(entries) };
 }

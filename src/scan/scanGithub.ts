@@ -1,4 +1,5 @@
 import { estimateLines, type RepoRef } from '../core/github';
+import { extractImports, hasImports } from '../core/imports';
 import { isIgnoredPath } from '../core/ignore';
 import { isTextual } from '../core/languages';
 import type { FileEntry } from '../core/tree';
@@ -6,7 +7,7 @@ import { countLines, type ScanProgress, type ScanResult } from './scanFolder';
 
 /** Raw downloads are not API-rate-limited, but they are still bandwidth: count lines exactly for
  *  the largest files up to this many, and estimate the rest from their byte size. */
-const MAX_DOWNLOADS = 300;
+const MAX_DOWNLOADS = 700;
 const MAX_DOWNLOAD_BYTES = 300_000;
 const CONCURRENCY = 12;
 const MAX_FILES = 20_000;
@@ -79,9 +80,13 @@ export async function scanGithubRepo(
   if (blobs.length === 0) throw new GithubError('empty', 'That repository has no files to show.');
 
   const lines = new Map<string, number>();
+  const imports = new Map<string, string[]>();
+  // Source files with imports come first — they are what the architecture view is made of —
+  // then the largest of everything else, for line counts.
+  const rank = (b: Blob): number => (hasImports(b.path) ? 1 : 0);
   const toFetch = blobs
     .filter((b) => isTextual(b.path) && b.size <= MAX_DOWNLOAD_BYTES)
-    .sort((a, b) => b.size - a.size)
+    .sort((a, b) => rank(b) - rank(a) || b.size - a.size)
     .slice(0, MAX_DOWNLOADS);
   const raw = (path: string): string =>
     `https://raw.githubusercontent.com/${repo.owner}/${repo.repo}/${encodeURIComponent(ref)}/${path.split('/').map(encodeURIComponent).join('/')}`;
@@ -94,7 +99,11 @@ export async function scanGithubRepo(
       if (!blob) break;
       try {
         const res = await fetch(raw(blob.path));
-        if (res.ok) lines.set(blob.path, countLines(await res.text()));
+        if (res.ok) {
+          const text = await res.text();
+          lines.set(blob.path, countLines(text));
+          if (hasImports(blob.path)) imports.set(blob.path, extractImports(blob.path, text));
+        }
       } catch {
         // A failed download just falls back to the estimate.
       }
@@ -118,10 +127,13 @@ export async function scanGithubRepo(
     lines:
       lines.get(b.path) ??
       (isTextual(b.path) ? estimateLines(b.size, sampleBytes, sampleLines) : 0),
+    imports: imports.get(b.path) ?? [],
   }));
   return {
     rootName: `${repo.owner}/${repo.repo}`,
     entries,
     truncated: tree.truncated || tree.blobs.length > MAX_FILES,
+    analysed: imports.size,
+    analysable: blobs.filter((b) => hasImports(b.path)).length,
   };
 }

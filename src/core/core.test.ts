@@ -11,10 +11,10 @@ import { buildTree, summarize, walk, type DirNode } from './tree';
 
 const sample = (): DirNode =>
   buildTree('repo', [
-    { path: 'README.md', bytes: 10, lines: 5 },
-    { path: 'src/a.ts', bytes: 100, lines: 50 },
-    { path: 'src/deep/b.ts', bytes: 200, lines: 70 },
-    { path: 'web/c.css', bytes: 30, lines: 20 },
+    { path: 'README.md', bytes: 10, lines: 5, imports: [] },
+    { path: 'src/a.ts', bytes: 100, lines: 50, imports: [] },
+    { path: 'src/deep/b.ts', bytes: 200, lines: 70, imports: [] },
+    { path: 'web/c.css', bytes: 30, lines: 20, imports: [] },
   ]);
 
 describe('buildTree', () => {
@@ -31,7 +31,7 @@ describe('buildTree', () => {
   });
 
   it('creates intermediate directories that contain no files directly', () => {
-    const root = buildTree('r', [{ path: 'a/b/c/d.ts', bytes: 1, lines: 1 }]);
+    const root = buildTree('r', [{ path: 'a/b/c/d.ts', bytes: 1, lines: 1, imports: [] }]);
     const paths = [...walk(root)].map((w) => w.node.path);
     expect(paths).toEqual(['', 'a', 'a/b', 'a/b/c', 'a/b/c/d.ts']);
   });
@@ -220,6 +220,7 @@ describe('layoutPipes grouping', () => {
         path: `packages/${p}/src/f${i}.ts`,
         bytes: 100,
         lines: 10,
+        imports: [],
       })),
     ),
   );

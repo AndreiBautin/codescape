@@ -5,6 +5,8 @@ export interface FileEntry {
   readonly path: string;
   readonly bytes: number;
   readonly lines: number;
+  /** Import specifiers as written in the file; empty when it was not read. */
+  readonly imports: readonly string[];
 }
 
 export interface FileNode {
