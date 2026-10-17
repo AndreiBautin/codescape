@@ -2,9 +2,11 @@
 
 **Live:** https://andreibautin.github.io/codescape/ · **Landing page:** https://andreibautin.github.io/codescape-demo/ ([repo](https://github.com/AndreiBautin/codescape-demo))
 
-A screensaver for your source code. Point it at a folder and watch the codebase grow as
-**3D Pipes**, fly past as a **Starfield**, or ribbon across the screen as **Mystify** — the
-old Windows screensavers, rebuilt with glass UI and real data.
+A way to understand a codebase's architecture that is actually enjoyable to look at. Point it at
+any public GitHub repo (or a local folder) and it reads the imports, works out which modules
+depend on which, finds dependency cycles, and draws it all as one of six classic Microsoft
+screensavers: **3D Pipes**, **Starfield**, **Mystify**, **Flying Windows** (as Flying Files),
+**Beziers** and **3D Flower Box**.
 
 ## Run it
 
@@ -19,7 +21,7 @@ Then open http://localhost:5391 and paste any public GitHub repo (`owner/name` o
 drag-and-drop; other browsers fall back to an upload-style picker). `?demo=1` skips straight
 to a built-in sample codebase.
 
-**Keys:** `1` `2` `3` modes · `Space` pause · `F` fullscreen · `O` open folder · `R` reshuffle.
+**Keys:** `1`–`6` modes · `Esc` back out · `Space` pause · `F` fullscreen · `O` open folder · `R` reshuffle.
 URL options: `repo` (e.g. `?repo=facebook/react`), `mode`, `speed` (0.1–5), `seed`, `demo`.
 
 **Install:** in Chrome/Edge click the install icon in the address bar — it gets a desktop icon,
@@ -31,9 +33,15 @@ load uses two.
 
 ## The idea that makes it click
 
-The codebase becomes a tree once, in pure code (`src/core`), and each screensaver is just a
-different way of drawing that tree: **a pipe is a top-level folder, a branch is a subfolder,
-a joint is a file**; a star is a file coloured by language; a Mystify polygon is a folder
-whose speed is its size. Everything is read locally in the browser — nothing leaves the machine.
+The codebase becomes two things once, in pure code (`src/core`): a **folder tree** and an
+**import graph** rolled up to modules. Every screensaver is just a different way of drawing
+those two — a pipe per folder, a star or flying window per file, a ribbon per module — with
+the dependencies as particle flows between them (importer → imported, cycles in red). The
+inspector says what the picture means: each module's layer (entry / core / foundation),
+what it depends on, what uses it. Click to inspect, double-click a folder to go inside.
+
+Imports are read with per-language regexes for TS/JS, Python, Go, Rust, C/C++ and
+Java/Kotlin — deliberately, instead of shipping a parser per language. It errs toward missing
+an edge; the one known way it invents one is an import inside a comment or string.
 
 `pnpm verify` runs typecheck, lint, format check, tests and build; it gates every push.

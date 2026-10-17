@@ -1,5 +1,8 @@
 # Codescape — notes for whoever comes next
 
+The product is an **architecture explorer** that looks like 90s Microsoft screensavers — every
+mode must stay a real MS screensaver _and_ show the dependency structure (flows + pin).
+
 - `src/core` is pure and DOM-free; the lint config enforces it. New mapping logic
   (tree → geometry) goes there, with a test. Scenes only turn layouts into pixels.
 - A new screensaver = a `Scene` in `src/scenes/` + an entry in `MODES` (`core/config.ts`) +
@@ -21,3 +24,8 @@
   60/hour); line counts come from raw.githubusercontent.com, which is not API-limited.
 - Landing page lives in a separate repo, `AndreiBautin/codescape-demo` (one static file).
 - Python on this machine defaults to cp1252: pass `encoding='utf-8'` when scripting edits.
+- Every Scene implements `pin(node)` and draws flows from `ctx.graph` (module level) and
+  `ctx.edges` (file level). Cycle edges are always `CYCLE_COLOR` (scenes/flow.ts).
+- Resolution must not guess: when unsure, return null. Add a test per new form. (Extraction
+  is regex, so imports inside comments/strings do slip through — known, documented.)
+- GitHub scans stay at 2 API calls; contents come from raw.githubusercontent.com (≤700 files).
